@@ -1,0 +1,43 @@
+name: Release plugin
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then exit 1; fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+          [[ "${VERSION}" == *-* ]] && echo "prerelease=true" >> "${GITHUB_OUTPUT}" || echo "prerelease=false" >> "${GITHUB_OUTPUT}"
+      - name: Build Registry artifact
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          python scripts/build_registry_artifact.py "${VERSION}"
+          echo "asset=course_selection-${VERSION}.zip" >> "${GITHUB_OUTPUT}"
+      - name: Verify checksum
+        run: sha256sum -c "${{ steps.package.outputs.asset }}.sha256"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          ASSET="${{ steps.package.outputs.asset }}"
+          git tag "${TAG}" "${GITHUB_SHA}"
+          git push origin "${TAG}"
+          FLAGS=()
+          [[ "${{ steps.version.outputs.prerelease }}" == "true" ]] && FLAGS+=(--prerelease)
+          gh release create "${TAG}" "${ASSET}" "${ASSET}.sha256" --title "${TAG}" --generate-notes "${FLAGS[@]}"

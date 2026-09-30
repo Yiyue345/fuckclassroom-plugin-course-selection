@@ -1,0 +1,9 @@
+{% import "ui/components.html" as ui %}
+{% call ui.section("auto-selection", "定时选课", "设置重试节奏与需要关注的教学班。") %}
+    <div class="field-row">
+      {{ ui.field("auto_selection_retry_seconds", "普通失败重试（秒）", settings.auto_selection_retry_seconds, type="number", min="5", max="3600", step="1") }}
+      {{ ui.field("auto_selection_session_retry_seconds", "会话恢复重试（秒）", settings.auto_selection_session_retry_seconds, type="number", min="15", max="3600", step="1") }}
+    </div>
+    {{ ui.field("auto_selection_capacity_retry_seconds", "满课人数监测（秒）", settings.auto_selection_capacity_retry_seconds, type="number", min="15", max="3600", step="1") }}
+    <div class="field"><label for="catalog_lesson_name_targets">目标教学班名称</label><textarea class="input settings-textarea" id="catalog_lesson_name_targets" name="catalog_lesson_name_targets" rows="5" placeholder="每行一个教学班名称，最多 20 个">{{ settings.catalog_lesson_name_targets|join('\n') }}</textarea></div>
+{% endcall %}

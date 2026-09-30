@@ -1,0 +1,5 @@
+{% set selection_session_status = request.app.state.get_selection_session_status() %}
+<a class="session-card" href="/accounts#selection-session" data-sidebar-session="selection" title="{% if selection_session_status.is_valid is sameas true %}会话有效 · {{ selection_session_status.checked_at or '刚刚验证' }}{% elif selection_session_status.is_saved %}会话待验证{% else %}未登录{% endif %}">
+  <span class="session-dot{% if selection_session_status.is_saved and selection_session_status.is_valid is not sameas false %} valid{% else %} invalid{% endif %}" data-session-indicator="selection"></span>
+  <span><span class="session-title">本科教务</span><span class="session-meta" data-session-label="selection">{% if selection_session_status.is_valid is sameas true %}会话有效{% elif selection_session_status.is_saved %}待验证{% else %}未登录{% endif %}</span></span>
+</a>

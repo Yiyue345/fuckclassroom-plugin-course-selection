@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set active_system = "selection" %}
+{% set active_nav = "selection_captures" %}
+
+{% block title %}{{ name }} · 学业助手{% endblock %}
+{% block breadcrumb_parent %}<a href="/selection/captures">接口记录</a>{% endblock %}
+{% block page_title %}{{ name }}{% endblock %}
+
+{% block content %}
+  <div class="page-head"><div><h1>{{ name }}</h1><p class="page-description">已过滤常见敏感字段的接口记录。</p></div><div class="head-actions"><a class="btn" href="/selection/captures"><svg class="icon"><use href="/static/icons.svg#arrow-left"></use></svg>返回记录</a></div></div>
+  <section class="surface capture-content"><pre>{{ content }}</pre></section>
+{% endblock %}

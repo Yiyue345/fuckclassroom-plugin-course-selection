@@ -1,0 +1,45 @@
+name: Publish beta
+on:
+  workflow_run:
+    workflows: ["Test plugin"]
+    types: [completed]
+    branches: ["main"]
+permissions:
+  contents: write
+jobs:
+  beta:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Resolve beta version
+        id: version
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          base = str(json.loads(Path("plugin.json").read_text())["version"]).split("-", 1)[0]
+          beta = f"{base}-beta.{os.environ['GITHUB_RUN_NUMBER']}"
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as out:
+              out.write(f"version={beta}\n")
+              out.write(f"tag=v{beta}\n")
+      - name: Build Registry artifact
+        id: package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          python scripts/build_registry_artifact.py "${VERSION}"
+          echo "asset=course_selection-${VERSION}.zip" >> "${GITHUB_OUTPUT}"
+      - name: Verify checksum
+        run: sha256sum -c "${{ steps.package.outputs.asset }}.sha256"
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          ASSET="${{ steps.package.outputs.asset }}"
+          git tag "${TAG}" "${SHA}"
+          git push origin "${TAG}"
+          gh release create "${TAG}" "${ASSET}" "${ASSET}.sha256" --target "${SHA}" --title "${TAG}" --generate-notes --prerelease

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_system = "selection" %}
+{% set active_nav = "selection_auto" %}
+
+{% block title %}定时选课 · 学业助手{% endblock %}
+{% block page_title %}定时选课{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <div><h1>定时选课</h1></div>
+    <div class="head-actions">
+      <a class="btn primary" href="/selection/info"><svg class="icon"><use href="/static/icons.svg#check-square"></use></svg>添加课程</a>
+    </div>
+  </div>
+
+  {% if select_error %}<div class="notice error"><svg class="icon"><use href="/static/icons.svg#circle-alert"></use></svg><span>{{ select_error }}</span></div>{% endif %}
+
+  {% set active_jobs = jobs|selectattr("is_active")|list %}
+  {% set selected_jobs = jobs|selectattr("status", "equalto", "selected")|list %}
+  <div class="stat-band auto-selection-stats">
+    <div class="stat"><div class="stat-label">等待执行</div><div class="stat-value">{{ active_jobs|length }}</div><div class="stat-foot">含等待空位、登录与重试</div></div>
+    <div class="stat"><div class="stat-label">已经选上</div><div class="stat-value">{{ selected_jobs|length }}</div><div class="stat-foot">自动停止的成功任务</div></div>
+    <div class="stat"><div class="stat-label">任务总数</div><div class="stat-value">{{ jobs|length }}</div><div class="stat-foot">记录保存在本机</div></div>
+  </div>
+
+  <div class="table-wrap" data-auto-job-list>
+    <table class="auto-selection-table">
+      <thead><tr><th>课程 / 教学班</th><th>选课批次</th><th>执行状态</th><th>提交 / 监测</th><th></th></tr></thead>
+      <tbody>
+        {% for job in jobs %}
+          {% set status_color = "green" if job.status == "selected" else ("red" if job.status in ["full", "failed", "expired"] else ("gray" if job.status == "cancelled" else "blue")) %}
+          <tr data-auto-job-id="{{ job.id }}">
+            <td>
+              <div class="table-title">{{ job.course.course_name or "未命名课程" }}</div>
+              <div class="table-subtitle">{{ job.course.lesson_name or "教学班未命名" }}{% if job.course.teachers %} · {{ job.course.teachers }}{% endif %}{% if job.course.lesson_code %} · {{ job.course.lesson_code }}{% endif %}</div>
+            </td>
+            <td>
+              <div class="table-title" style="font-size:12px">{{ job.batch_label }}</div>
+              <div class="table-subtitle">{{ job.start_at }} 至 {{ job.end_at }}</div>
+            </td>
+            <td>
+              <span class="status {{ status_color }}" data-auto-job-status>{{ job.status_label }}</span>
+              <div class="table-subtitle auto-job-message" data-auto-job-message>{{ job.message }}</div>
+              <div class="table-subtitle" data-auto-job-next>{% if job.next_attempt_at %}下次 {{ job.next_attempt_at }}{% endif %}</div>
+            </td>
+            <td>
+              <strong data-auto-job-attempts>{{ job.attempts }}</strong>
+              <div class="table-subtitle" data-auto-job-checks>监测 {{ job.capacity_checks }} 次</div>
+              <div class="table-subtitle" data-auto-job-capacity>{% if job.max_count %}人数 {{ job.last_selected_count if job.last_selected_count is not none else "未知" }}/{{ job.max_count }}{% endif %}</div>
+              <div class="table-subtitle" data-auto-job-last>{{ job.last_attempt_at or "尚未提交" }}</div>
+            <td class="actions-cell">
+              <div class="selection-row-actions">
+                {% if job.is_active %}
+                  <form method="post" action="/selection/auto/{{ job.id }}/cancel"><button class="btn small" type="submit">取消</button></form>
+                {% elif job.status in ["cancelled", "failed"] %}
+                  <form method="post" action="/selection/auto/{{ job.id }}/resume"><button class="btn small" type="submit"><svg class="icon small"><use href="/static/icons.svg#rotate-ccw"></use></svg><span>重试</span></button></form>
+                {% endif %}
+                {% if not job.is_active %}
+                  <form method="post" action="/selection/auto/{{ job.id }}/delete" data-confirm="确认删除这条定时选课记录？"><button class="btn small danger icon-only" type="submit" title="删除任务"><svg class="icon small"><use href="/static/icons.svg#trash-2"></use></svg></button></form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="table-empty">暂无定时选课任务</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+

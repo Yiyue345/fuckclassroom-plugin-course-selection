@@ -1,0 +1,54 @@
+name: Test plugin
+
+on:
+  push:
+    branches: ["main", "plugin-management"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install validation dependencies
+        run: python -m pip install packaging
+      - name: Validate manifest
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          from packaging.specifiers import SpecifierSet
+          from packaging.version import Version
+          data = json.loads(Path("plugin.json").read_text(encoding="utf-8"))
+          assert data["id"] == "course_selection"
+          assert data["api_version"] == 1
+          assert data["requires"] == ["core_ui"]
+          assert data["execution"] == "in_process"
+          assert data["rpc_api_version"] is None
+          assert data["python_requires"] == [{
+              "requirement": "playwright>=1.45",
+              "import": "playwright",
+              "label": "Playwright",
+              "optional": False,
+          }]
+          assert SpecifierSet(data["app_requires"]).contains(Version("0.2.0.dev0"), prereleases=True)
+      - name: Check Python syntax
+        run: python -m compileall -q __init__.py plugin.py accounts.py lifecycle.py routes.py services.py settings_hooks.py worker.py scripts/build_registry_artifact.py
+      - name: Check external plugin boundaries
+        shell: bash
+        run: |
+          if grep -REn 'from \.\.(\.|[A-Za-z_])' --include='*.py' . --exclude-dir=.git; then
+            echo "External plugin must use fuckclassroom.* for host imports" >&2
+            exit 1
+          fi
+          grep -F 'from fuckclassroom.course_selection import (' services.py
+          grep -F 'from fuckclassroom.course_selection import (' worker.py
+          test -f static/selection_display.js
+      - name: Smoke-build Registry v1 artifact
+        run: |
+          python scripts/build_registry_artifact.py 0.1.0-ci.0
+          sha256sum -c course_selection-0.1.0-ci.0.zip.sha256
