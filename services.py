@@ -9,12 +9,10 @@ from typing import Any
 
 from fuckclassroom.core.atomic import atomic_write_text
 from fuckclassroom.core.plugins import PluginContext
-from fuckclassroom.course_selection import (
-    CourseSelectionApiError,
-    CourseSelectionAssistant,
-    SelectionBatch,
-)
-from fuckclassroom.course_selection.automation import AutoSelectionJob
+from .assistant import CourseSelectionAssistant
+from .automation import AutoSelectionJob
+from .models import CourseSelectionApiError, SelectionBatch
+from .proxy import Hy2ProxyManager
 from fuckclassroom.plugins.process_runtime import ProcessPluginError, ProcessPluginHost
 from fuckclassroom.plugins.rpc import PLUGIN_RPC_API_VERSION
 
@@ -482,11 +480,25 @@ def _clean_worker_error(message: str) -> str:
 
 
 def setup_services(context: PluginContext) -> None:
-    from fuckclassroom.auth.academic import get_academic_session
-
     config = context.config
     services = context.services
-    local = get_academic_session(context)
+    local = services.maybe("academic_session")
+    hy2_proxy = services.maybe("hy2_proxy")
+    if local is None:
+        if hy2_proxy is None:
+            hy2_proxy = Hy2ProxyManager(config)
+            services.add("hy2_proxy", hy2_proxy)
+        local = CourseSelectionAssistant(
+            config,
+            hy2_proxy=hy2_proxy,
+            credential_store=services.get("credential_store"),
+            verification_broker=services.get("verification_broker"),
+            login_lock=services.get("login_lock"),
+        )
+        services.add("academic_session", local)
+    elif hy2_proxy is None:
+        hy2_proxy = getattr(local, "hy2_proxy", None) or Hy2ProxyManager(config)
+        services.add("hy2_proxy", hy2_proxy)
     host = ProcessPluginHost(
         plugin_id="course-selection-worker",
         root=Path(__file__).resolve().parent,
