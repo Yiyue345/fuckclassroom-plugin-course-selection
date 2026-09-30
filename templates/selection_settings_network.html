@@ -1,0 +1,10 @@
+{% import "ui/components.html" as ui %}
+<section class="settings-section" id="selection-network">
+  <div><h2>教务访问</h2><p>本科教务在校外访问时可按需使用内置 Hy2 通道；该能力仅属于本科选课插件。</p></div>
+  <div class="fields">
+    {{ ui.checkbox("hy2_enabled", "启用 Hy2 教务代理", settings.hy2_enabled) }}
+    <div class="detail-grid"><div class="detail-item"><label>运行状态</label><strong>{{ panel_context.hy2_status.message }}</strong></div><div class="detail-item"><label>启动策略</label><strong>仅在教务访问需要时启动</strong></div></div>
+    <p class="field-hint">只有直接入口和公网入口都不可用、且启用了 Hy2 时才会尝试启动代理。</p>
+    {% if settings.hy2_enabled %}<div class="notice warning hy2-security-note"><svg class="icon"><use href="/static/icons.svg#circle-alert"></use></svg><span>Hy2 默认使用经过源码指纹和 SHA-256 校验的预编译 runner。若系统阻止预编译组件，程序会尝试本机 Cargo 构建作为兜底；无法构建时仍会继续尝试公网教务或 WebVPN。</span></div>{% endif %}
+  </div>
+</section>
