@@ -37,7 +37,7 @@ jobs:
           }]
           assert SpecifierSet(data["app_requires"]).contains(Version("0.2.0.dev0"), prereleases=True)
       - name: Check Python syntax
-        run: python -m compileall -q __init__.py plugin.py accounts.py lifecycle.py routes.py services.py settings_hooks.py worker.py scripts/build_registry_artifact.py
+        run: python -m compileall -q __init__.py plugin.py accounts.py lifecycle.py routes.py services.py settings_hooks.py worker.py assistant.py api.py automation.py browser.py catalog.py helpers.py hy2_prebuilt.py models.py proxy.py session.py scripts/build_registry_artifact.py
       - name: Check external plugin boundaries
         shell: bash
         run: |
@@ -45,8 +45,15 @@ jobs:
             echo "External plugin must use fuckclassroom.* for host imports" >&2
             exit 1
           fi
-          grep -F 'from fuckclassroom.course_selection import (' services.py
-          grep -F 'from fuckclassroom.course_selection import (' worker.py
+          if grep -REn 'fuckclassroom\.course_selection' --include='*.py' . --exclude-dir=.git; then
+            echo "Course Selection plugin must own its implementation modules" >&2
+            exit 1
+          fi
+          grep -F 'from .assistant import CourseSelectionAssistant' services.py
+          grep -F 'from .assistant import CourseSelectionAssistant' worker.py
+          test -f models.py
+          test -f proxy.py
+          test -f automation.py
           test -f static/selection_display.js
       - name: Smoke-build Registry v1 artifact
         run: |
