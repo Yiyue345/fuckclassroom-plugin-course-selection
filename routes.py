@@ -6,13 +6,9 @@ from urllib.parse import parse_qs, quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
-from fuckclassroom.course_selection import (
-    CourseSelectionApiError,
-    CourseSelectionAssistant,
-    SELECTION_INFO_VIEWS,
-    SelectionTarget,
-)
-from fuckclassroom.course_selection.helpers import _group_plan_courses
+from .assistant import CourseSelectionAssistant
+from .helpers import _group_plan_courses
+from .models import CourseSelectionApiError, SELECTION_INFO_VIEWS, SelectionTarget
 
 
 def _resolve_catalog_queue_batch(
