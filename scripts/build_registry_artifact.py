@@ -18,6 +18,8 @@ SEMVER_RE = re.compile(
 ROOT_FILES = (
     "__init__.py", "plugin.json", "plugin.py", "accounts.py", "lifecycle.py",
     "routes.py", "services.py", "settings_hooks.py", "worker.py",
+    "assistant.py", "api.py", "automation.py", "browser.py", "catalog.py",
+    "helpers.py", "hy2_prebuilt.py", "models.py", "proxy.py", "session.py",
     "requirements.txt", "README.md",
 )
 TREE_DIRS = ("templates", "static")
