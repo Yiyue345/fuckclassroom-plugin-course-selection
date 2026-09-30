@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% set active_system = "selection" %}
+{% set active_nav = "selection_selected" if info.active_view == "selected" else "selection_info" %}
+
+{% block title %}{{ views.get(info.active_view, "选课信息") }} · 学业助手{% endblock %}
+{% block page_title %}{{ "已选课程" if info.active_view == "selected" else "选课中心" }}{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>{{ "已选课程" if info.active_view == "selected" else "选课中心" }}</h1>
+      <p class="page-description">查看课程、教学班容量和上课时间，操作结果会在当前页面返回。</p>
+    </div>
+    <div class="head-actions">
+      <form class="selection-batch-switcher" method="post" action="/selection/info/refresh" data-inline-task data-task-status="#selection-refresh-status" data-task-starting="正在切换并刷新选课批次" data-task-fallback="选课批次刷新失败" data-task-success="选课批次已更新">
+        <input type="hidden" name="view" value="{{ info.active_view }}">
+        <select class="select" name="batch_key" title="选课批次" {% if not info.batches %}disabled{% endif %}>
+          {% for batch in info.batches %}
+            <option value="{{ batch.student_id }}:{{ batch.turn_id }}" {% if info.current_batch and batch.student_id == info.current_batch.student_id and batch.turn_id == info.current_batch.turn_id %}selected{% endif %}>{{ batch.label }}</option>
+          {% else %}
+            <option value="">暂无已缓存批次</option>
+          {% endfor %}
+        </select>
+        <button class="btn" type="submit" data-task-submit><svg class="icon"><use href="/static/icons.svg#refresh-cw"></use></svg>切换/刷新</button>
+      </form>
+    </div>
+  </div>
+
+  {% if select_error %}<div class="notice error"><svg class="icon"><use href="/static/icons.svg#circle-alert"></use></svg><span>{{ select_error }}</span></div>{% endif %}
+
+  {% set current_batch = info.current_batch %}
+  <div class="selection-batch-summary">
+    <div class="selection-batch-name">
+      <span>当前批次</span>
+      <strong>{{ current_batch.label if current_batch else (info.title or "尚未缓存选课批次") }}</strong>
+    </div>
+    <div class="selection-batch-times">
+      <span class="selection-batch-time"><small>开始</small><strong>{{ current_batch.start_at if current_batch and current_batch.start_at else "未公布" }}</strong></span>
+      <span class="selection-batch-time"><small>结束</small><strong>{{ current_batch.end_at if current_batch and current_batch.end_at else "未公布" }}</strong></span>
+      <span class="status {% if current_batch and current_batch.is_open %}green{% else %}gray{% endif %}"><span class="tiny-dot"></span>{% if current_batch and current_batch.is_open %}开放中{% else %}未开放{% endif %}</span>
+    </div>
+  </div>
+
+  <div class="notice inline-task-status hidden" id="selection-refresh-status" role="status" aria-live="polite">
+    <svg class="icon"><use href="/static/icons.svg#refresh-cw"></use></svg>
+    <div class="inline-task-body">
+      <div class="inline-task-message" data-task-message>正在准备刷新</div>
+      <div class="progress" aria-hidden="true"><span data-task-progress></span></div>
+    </div>
+  </div>
+  <div class="notice inline-task-status hidden" id="selection-action-status" role="status" aria-live="polite">
+    <svg class="icon"><use href="/static/icons.svg#refresh-cw"></use></svg>
+    <div class="inline-task-body">
+      <div class="inline-task-message" data-task-message>正在准备课程操作</div>
+      <div class="progress" aria-hidden="true"><span data-task-progress></span></div>
+    </div>
+  </div>
+
+  <nav class="tabs" aria-label="选课课程分类">
+    {% for key, label in views.items() %}
+      {% set href = "/selection/info" if key == "major-plan" else "/selection/info/" ~ key %}
+      {% set view_courses = info.sections.get(key, []) %}
+      <a class="tab{% if info.active_view == key %} active{% endif %}" href="{{ href }}">{{ label }}<span class="count">{{ view_courses|map(attribute="course_name")|unique|list|length }}</span></a>
+    {% endfor %}
+  </nav>
+
+  <div class="toolbar" style="padding-top:16px">
+    <div class="toolbar-left">
+      <div class="search"><svg class="icon"><use href="/static/icons.svg#search"></use></svg><input class="input" type="search" placeholder="搜索课程、教师或教学班" data-filter-input="#selection-table"></div>
+    </div>
+    <div class="toolbar-right">
+      <label class="toggle-control" title="自动刷新选课人数">
+        <input type="checkbox" data-count-refresh-toggle>
+        <span class="toggle-track" aria-hidden="true"><span></span></span>
+        <span>刷新人数</span>
+      </label>
+      <span class="section-meta" data-count-refresh-status>已暂停</span>
+      <span class="status {% if session.is_saved and session.is_valid is not sameas false %}green{% else %}red{% endif %}"><span class="tiny-dot"></span>{% if session.is_valid is sameas true %}选课入口有效{% elif session.is_saved %}会话已保存{% else %}尚未登录{% endif %}</span>
+      {% if info.title %}<span class="section-meta">{{ info.title }}</span>{% endif %}
+      <span class="section-meta">更新于 {{ info.updated_at or "尚未刷新" }}</span>
+    </div>
+  </div>
+
+  <div class="{% if info.active_view == 'major-plan' %}selection-plan-list{% else %}selection-course-list{% endif %}" id="selection-table">
+    {% for course_section in course_sections %}
+      {% set section_loop = loop %}
+      {% if course_section.label %}
+        <section class="selection-plan-section" data-filter-row>
+          <div class="selection-plan-section-head">
+            <h2>{{ course_section.label }}</h2>
+            <span>{{ course_section.courses|groupby("course_name", default="未命名课程")|length }} 门课程 · {{ course_section.courses|length }} 个教学班</span>
+          </div>
+          <div class="selection-course-list">
+      {% endif %}
+    {% for course_name, course_group in course_section.courses|groupby("course_name", default="未命名课程") %}
+      {% set group_course = course_group|first %}
+      <details class="selection-course-group" data-filter-row{% if section_loop.first and loop.first %} open{% endif %}>
+        <summary class="selection-course-summary">
+          <span class="selection-course-chevron"><svg class="icon small"><use href="/static/icons.svg#chevron-down"></use></svg></span>
+          <span class="selection-course-copy">
+            <strong>{{ course_name or "未命名课程" }}</strong>
+            <span>{{ group_course.course_code or "无课程代码" }}{% if group_course.course_property %} · {{ group_course.course_property }}{% endif %}{% if group_course.credits is not none %} · {{ group_course.credits }} 学分{% endif %}</span>
+          </span>
+          <span class="selection-course-count">{{ course_group|length }} 个教学班</span>
+        </summary>
+        <div class="selection-course-table">
+          <table class="selection-lessons-table">
+            <thead><tr><th>教学班 / 教师</th><th>上课安排</th><th>容量</th><th>状态</th><th></th></tr></thead>
+            <tbody>
+              {% for course in course_group %}
+                {% set is_full = course.max_count is not none and course.selected_count is not none and course.max_count > 0 and course.selected_count >= course.max_count %}
+                <tr data-filter-row data-lesson-id="{{ course.lesson_id }}" data-max-count="{{ course.max_count if course.max_count is not none else '' }}" data-selected="{{ 'true' if course.is_selected else 'false' }}">
+                  <td><div class="table-title compact selection-lesson-name" title="{{ course.lesson_name or '未公布' }}">{{ course.lesson_name or "未公布" }}</div><div class="table-subtitle">{{ course.teachers or "教师未公布" }}{% if course.lesson_code %} · {{ course.lesson_code }}{% endif %}</div></td>
+                  <td><div data-selection-schedule>{{ course.time or "时间未公布" }}</div></td>
+                  <td data-capacity-cell>
+                    {% if course.selected_count is not none and course.max_count is not none and course.max_count > 0 %}
+                      <div class="capacity"><div class="progress"><span style="width: {{ [100, (course.selected_count * 100 / course.max_count)]|min }}%;{% if is_full %}background:var(--red){% elif course.selected_count * 100 / course.max_count > 85 %}background:var(--amber){% else %}background:var(--green){% endif %}"></span></div><span class="capacity-label">{{ course.selected_count }}/{{ course.max_count }}</span></div>
+                    {% else %}<span class="muted">未公布</span>{% endif %}
+                  </td>
+                  <td data-status-cell>{% if course.is_selected %}<span class="status green">已选</span>{% elif is_full %}<span class="status red">已满</span>{% else %}<span class="status blue">可选</span>{% endif %}</td>
+                  <td class="actions-cell">
+                    <div class="selection-row-actions">
+                      {% if course.is_selected or info.active_view == "selected" %}
+                        <form method="post" action="/selection/info/drop" data-confirm-handled data-selection-action="drop" data-task-status="#selection-action-status" data-course-name="{{ course.course_name or '这门课程' }}" data-confirm="确认退选 {{ course.course_name or '这门课程' }}？"><input type="hidden" name="view" value="{{ info.active_view }}"><input type="hidden" name="lesson_id" value="{{ course.lesson_id }}"><button class="btn small danger" type="submit" data-selection-submit>退课</button></form>
+                      {% else %}
+                        <form method="post" action="/selection/info/select" data-confirm-handled data-selection-action="select" data-task-status="#selection-action-status" data-course-name="{{ course.course_name or '这门课程' }}"><input type="hidden" name="view" value="{{ info.active_view }}"><input type="hidden" name="lesson_id" value="{{ course.lesson_id }}"><button class="btn small primary" type="submit" data-selection-submit {% if is_full %}disabled{% endif %}>选课</button></form>
+                        {% if current_batch and current_batch.start_at and current_batch.end_at %}
+                          <form method="post" action="/selection/auto/add" data-auto-selection data-course-name="{{ course.course_name or '这门课程' }}">
+                            <input type="hidden" name="lesson_id" value="{{ course.lesson_id }}">
+                            <button class="btn small" type="submit" data-auto-selection-submit {% if course.lesson_id in auto_lesson_ids %}disabled{% endif %}><svg class="icon small"><use href="/static/icons.svg#clock-3"></use></svg><span>{% if course.lesson_id in auto_lesson_ids %}已定时{% elif is_full %}候补{% else %}定时{% endif %}</span></button>
+                          </form>
+                        {% endif %}
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {% endfor %}
+      {% if course_section.label %}
+          </div>
+        </section>
+      {% endif %}
+    {% endfor %}
+    {% if not info.courses %}
+      <div class="table-wrap"><div class="table-empty">暂无缓存课程，点击右上角刷新</div></div>
+    {% endif %}
+  </div>
+
+  {% if last_action %}
+    {% set action_success = last_action.status in ["成功", "已提交"] %}
+    <aside class="toast{% if not action_success %} error{% endif %}" data-toast>
+      <div class="toast-icon"><svg class="icon small"><use href="/static/icons.svg#{% if action_success %}circle-check{% else %}circle-alert{% endif %}"></use></svg></div>
+      <div><div class="toast-title">{{ last_action.action_label or "课程操作" }}：{{ last_action.status or "已提交" }}</div><p class="toast-copy">{{ last_action.course_name or "未命名课程" }}：{{ last_action.message }}</p></div>
+    </aside>
+  {% endif %}
+{% endblock %}
