@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% set ui_page = "selection_catalog" %}
+{% set active_system = "selection" %}
+{% set active_nav = "selection_catalog" %}
+
+{% block title %}全校开课 · 学业助手{% endblock %}
+{% block page_title %}全校开课{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>全校开课</h1>
+      <p class="page-description">教学班、授课教师、上课安排与容量。</p>
+    </div>
+    <div class="head-actions">
+      <label class="catalog-queue-batch" for="catalog-queue-batch">
+        <span>队列批次</span>
+        <select class="select" id="catalog-queue-batch">
+          <option value="">请选择队列批次</option>
+          <option value="pending">等待新批次自动匹配</option>
+        </select>
+      </label>
+      <button class="btn" type="button" data-catalog-refresh><svg class="icon"><use href="/static/icons.svg#refresh-cw"></use></svg>刷新</button>
+    </div>
+  </div>
+
+  <form class="catalog-filters" data-catalog-form>
+    <div class="catalog-filter-grid">
+      <div class="field"><label for="catalog-semester">开课学期</label><select class="select" id="catalog-semester" name="semester_id"><option value="">当前学期</option></select></div>
+      <div class="field"><label for="catalog-course-name">课程名称</label><input class="input" id="catalog-course-name" name="course_name" type="search"></div>
+      <div class="field"><label for="catalog-lesson-name">教学班名称</label><input class="input" id="catalog-lesson-name" name="lesson_name" type="search"></div>
+      <div class="field"><label for="catalog-teacher-term">授课教师</label><div class="catalog-teacher-field"><input class="input" id="catalog-teacher-term" type="search" autocomplete="off"><select class="select hidden" id="catalog-teacher" name="teacher_id" aria-label="选择教师"></select></div></div>
+      <div class="field"><label for="catalog-department">开课院系</label><select class="select" id="catalog-department" name="department_id"><option value="">全部院系</option></select></div>
+      <div class="field"><label for="catalog-campus">校区</label><select class="select" id="catalog-campus" name="campus_id"><option value="">全部校区</option></select></div>
+    </div>
+
+    <details class="catalog-advanced">
+      <summary><svg class="icon small"><use href="/static/icons.svg#chevron-down"></use></svg><span>更多筛选</span></summary>
+      <div class="catalog-filter-grid advanced">
+        <div class="field"><label for="catalog-course-code">课程代码</label><input class="input mono" id="catalog-course-code" name="course_code"></div>
+        <div class="field"><label for="catalog-lesson-code">教学班代码</label><input class="input mono" id="catalog-lesson-code" name="lesson_code"></div>
+        <div class="field"><label for="catalog-course-type">课程类别</label><select class="select" id="catalog-course-type" name="course_type_id"><option value="">全部类别</option></select></div>
+        <div class="field"><label for="catalog-compulsory">修读类型</label><select class="select" id="catalog-compulsory" name="compulsory"><option value="">全部类型</option><option value="COMPULSORY">必修</option><option value="ELECTIVE">选修</option></select></div>
+        <div class="field"><label for="catalog-exam-mode">考核方式</label><select class="select" id="catalog-exam-mode" name="exam_mode_id"><option value="">全部方式</option></select></div>
+        <div class="field"><label for="catalog-grade">年级</label><select class="select" id="catalog-grade" name="grade"><option value="">全部年级</option></select></div>
+        <div class="field"><label for="catalog-weekday">星期</label><select class="select" id="catalog-weekday" name="weekday"><option value="">全部星期</option></select></div>
+        <div class="field"><label for="catalog-periods">节次</label><select class="select" id="catalog-periods" name="periods" multiple size="3"></select></div>
+        <div class="field"><label for="catalog-room">教室</label><input class="input" id="catalog-room" name="room"></div>
+        <div class="field"><label>学分范围</label><div class="field-row"><input class="input" name="credits_min" type="number" min="0" max="100" step="0.5" placeholder="最低"><input class="input" name="credits_max" type="number" min="0" max="100" step="0.5" placeholder="最高"></div></div>
+        <div class="field"><label>教学周范围</label><div class="field-row"><input class="input" name="week_start" type="number" min="1" max="60" placeholder="起始周"><input class="input" name="week_end" type="number" min="1" max="60" placeholder="结束周"></div></div>
+        <div class="field"><label>已选人数范围</label><div class="field-row"><input class="input" name="selected_count_min" type="number" min="0" placeholder="最低"><input class="input" name="selected_count_max" type="number" min="0" placeholder="最高"></div></div>
+      </div>
+    </details>
+
+    <div class="catalog-filter-actions">
+      <label class="toggle-control" title="仅显示设置中匹配的教学班">
+        <input type="checkbox" name="targets_only" value="1" {% if catalog_targets %}{% else %}disabled{% endif %}>
+        <span class="toggle-track" aria-hidden="true"><span></span></span>
+        <span>匹配目标{% if catalog_targets %}（{{ catalog_targets|length }}）{% endif %}</span>
+      </label>
+      <span class="catalog-targets">{% for target in catalog_targets[:3] %}<span class="status blue">{{ target }}</span>{% endfor %}{% if catalog_targets|length > 3 %}<span class="section-meta">+{{ catalog_targets|length - 3 }}</span>{% endif %}</span>
+      <div class="catalog-filter-buttons">
+        <button class="btn" type="reset">重置</button>
+        <button class="btn primary" type="submit"><svg class="icon"><use href="/static/icons.svg#search"></use></svg>查询</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="notice hidden" data-catalog-status role="status" aria-live="polite">
+    <svg class="icon"><use href="/static/icons.svg#refresh-cw"></use></svg>
+    <span data-catalog-status-text></span>
+  </div>
+
+  <div class="catalog-result-head">
+    <div><strong data-catalog-total>0 个教学班</strong><span class="section-meta" data-catalog-updated></span></div>
+    <div class="catalog-page-size"><label for="catalog-page-size">每页</label><select class="select" id="catalog-page-size"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option></select></div>
+  </div>
+
+  <div class="table-wrap catalog-table-wrap">
+    <table class="catalog-table">
+      <thead><tr><th>课程</th><th>教学班 / 教师</th><th>院系 / 类别</th><th>上课安排</th><th>容量</th><th>状态</th><th></th></tr></thead>
+      <tbody data-catalog-body><tr><td class="table-empty" colspan="7">正在读取课程</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="catalog-pagination">
+    <button class="btn" type="button" data-catalog-prev><svg class="icon"><use href="/static/icons.svg#arrow-left"></use></svg>上一页</button>
+    <span data-catalog-page>第 1 / 1 页</span>
+    <button class="btn" type="button" data-catalog-next>下一页<svg class="icon catalog-next-icon"><use href="/static/icons.svg#arrow-left"></use></svg></button>
+  </div>
+{% endblock %}
