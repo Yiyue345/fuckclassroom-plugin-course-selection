@@ -1,0 +1,2 @@
+{% set selection_session_status = request.app.state.get_selection_session_status() %}
+<span class="session-dot{% if selection_session_status.is_saved and selection_session_status.is_valid is not sameas false %} valid{% else %} invalid{% endif %}" data-session-indicator="selection"></span>
