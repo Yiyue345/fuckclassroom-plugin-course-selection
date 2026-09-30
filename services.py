@@ -482,7 +482,7 @@ def _clean_worker_error(message: str) -> str:
 
 
 def setup_services(context: PluginContext) -> None:
-    from ...auth.academic import get_academic_session
+    from fuckclassroom.auth.academic import get_academic_session
 
     config = context.config
     services = context.services
