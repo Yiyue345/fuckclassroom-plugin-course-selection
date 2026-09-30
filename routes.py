@@ -12,7 +12,7 @@ from fuckclassroom.course_selection import (
     SELECTION_INFO_VIEWS,
     SelectionTarget,
 )
-from ...course_selection.helpers import _group_plan_courses
+from fuckclassroom.course_selection.helpers import _group_plan_courses
 
 
 def _resolve_catalog_queue_batch(
