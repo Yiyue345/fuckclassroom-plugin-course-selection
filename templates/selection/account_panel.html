@@ -1,0 +1,27 @@
+<article class="surface account-session-panel" id="selection-session">
+      <header class="account-session-header">
+        <div class="account-session-name">
+          <span class="workspace-icon"><svg class="icon"><use href="/static/icons.svg#check-square"></use></svg></span>
+          <div><h2>本科教务</h2><span>{{ account.access.label }}入口 · {{ account.credentials.message }}</span></div>
+        </div>
+        <span class="status {% if account.session.is_saved and account.session.is_valid is not sameas false %}green{% else %}red{% endif %}"><span class="tiny-dot"></span>{% if account.session.is_valid is sameas true %}有效{% elif account.session.is_saved %}待验证{% else %}未登录{% endif %}</span>
+      </header>
+
+      <div class="session-state">
+        <span class="session-dot {% if account.session.is_saved and account.session.is_valid is not sameas false %}valid{% else %}invalid{% endif %}"></span>
+        <div><strong>{{ account.session.message }}</strong><span>{% if account.session.is_valid is sameas true %}已通过本科教务页面验证{% elif account.session.is_valid is sameas false %}需要重新登录本科教务{% else %}尚未验证教务页面{% endif %}</span></div>
+      </div>
+
+      <div class="detail-grid">
+        <div class="detail-item"><label>保存时间</label><strong>{{ account.session.saved_at or "无" }}</strong></div>
+        <div class="detail-item"><label>验证时间</label><strong>{{ account.session.checked_at or "尚未验证" }}</strong></div>
+        <div class="detail-item detail-wide"><label>最后页面</label><strong title="{{ account.session.final_url or '' }}">{{ account.session.final_url or "无" }}</strong></div>
+      </div>
+
+      <div class="account-session-actions">
+        <form method="post" action="/selection/login" data-inline-task data-session-login="selection" data-task-status="#account-task-status" data-task-group="account-auth" data-task-starting="正在打开本科教务登录窗口" data-task-fallback="本科教务登录失败" data-task-success="本科教务登录完成"><button class="btn primary" type="submit" data-task-submit><svg class="icon"><use href="/static/icons.svg#log-in"></use></svg>登录</button></form>
+        <form method="post" action="/selection/open" data-inline-task data-task-status="#account-task-status" data-task-group="account-auth" data-task-starting="正在验证本科教务会话" data-task-fallback="本科教务验证失败" data-task-success="本科教务会话已更新"><button class="btn" type="submit" data-task-submit><svg class="icon"><use href="/static/icons.svg#shield-check"></use></svg>验证会话</button></form>
+        <form method="post" action="/selection/open-course-select" data-inline-task data-task-status="#account-task-status" data-task-group="account-auth" data-task-starting="正在验证选课入口" data-task-fallback="选课入口验证失败" data-task-success="选课入口已验证"><button class="btn" type="submit" data-task-submit><svg class="icon"><use href="/static/icons.svg#check-square"></use></svg>验证选课入口</button></form>
+        <form method="post" action="/selection/logout" data-confirm="确认清除本科教务登录会话？"><button class="btn danger" type="submit"><svg class="icon"><use href="/static/icons.svg#log-out"></use></svg>清除会话</button></form>
+      </div>
+    </article>
