@@ -4,11 +4,71 @@ on:
     workflows: ["Test plugin"]
     types: [completed]
     branches: ["main"]
+
 permissions:
   contents: write
+
 jobs:
+  build-hy2:
+    if: github.event.workflow_run.conclusion == 'success'
+    name: Build Hy2 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Resolve platform key
+        id: platform
+        shell: bash
+        run: |
+          key="$(python - <<'PY'
+          import platform
+          system = platform.system().lower()
+          if system == "darwin":
+              system = "macos"
+          machine = platform.machine().lower()
+          if machine in {"amd64", "x86_64", "x64"}:
+              machine = "x86_64"
+          elif machine in {"arm64", "aarch64"}:
+              machine = "aarch64"
+          else:
+              raise SystemExit(f"unsupported architecture: {machine}")
+          print(f"{system}-{machine}")
+          PY
+          )"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Build release runner
+        shell: bash
+        working-directory: rust_module/hy2_proxy
+        run: cargo build --release --locked --bin hy2_serve
+      - name: Stage runner
+        shell: bash
+        run: |
+          mkdir -p hy2-out
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp rust_module/hy2_proxy/target/release/hy2_serve.exe hy2-out/hy2_serve.exe
+          else
+            cp rust_module/hy2_proxy/target/release/hy2_serve hy2-out/hy2_serve
+          fi
+      - name: Upload runner
+        uses: actions/upload-artifact@v4
+        with:
+          name: hy2-${{ steps.platform.outputs.key }}
+          path: hy2-out/*
+          if-no-files-found: error
+          retention-days: 7
+
   beta:
     if: github.event.workflow_run.conclusion == 'success'
+    needs: build-hy2
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +85,14 @@ jobs:
           with Path(os.environ["GITHUB_OUTPUT"]).open("a") as out:
               out.write(f"version={beta}\n")
               out.write(f"tag=v{beta}\n")
+      - name: Download Hy2 runners
+        uses: actions/download-artifact@v4
+        with:
+          pattern: hy2-*
+          path: .hy2-artifacts
+      - name: Generate verified Hy2 prebuilt manifest
+        run: |
+          python hy2_prebuilt.py package .hy2-artifacts rust_module/hy2_proxy rust_module/hy2_proxy/prebuilt
       - name: Build Registry artifact
         id: package
         run: |
@@ -33,6 +101,17 @@ jobs:
           echo "asset=course_selection-${VERSION}.zip" >> "${GITHUB_OUTPUT}"
       - name: Verify checksum
         run: sha256sum -c "${{ steps.package.outputs.asset }}.sha256"
+      - name: Verify packaged Hy2 runners
+        shell: python
+        run: |
+          import json, zipfile
+          from pathlib import Path
+          archive = next(Path(".").glob("course_selection-*.zip"))
+          with zipfile.ZipFile(archive) as z:
+              manifest = json.loads(z.read("rust_module/hy2_proxy/prebuilt/manifest.json"))
+              assert manifest["runners"]
+              for item in manifest["runners"].values():
+                  assert "rust_module/hy2_proxy/prebuilt/" + item["file"] in z.namelist()
       - name: Publish prerelease
         env:
           GH_TOKEN: ${{ github.token }}

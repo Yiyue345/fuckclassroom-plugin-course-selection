@@ -38,6 +38,22 @@ jobs:
           assert SpecifierSet(data["app_requires"]).contains(Version("0.2.0.dev0"), prereleases=True)
       - name: Check Python syntax
         run: python -m compileall -q __init__.py plugin.py accounts.py lifecycle.py routes.py services.py settings_hooks.py worker.py assistant.py api.py automation.py browser.py catalog.py helpers.py hy2_prebuilt.py models.py proxy.py session.py scripts/build_registry_artifact.py
+      - name: Validate plugin-owned Hy2 source
+        shell: bash
+        run: |
+          test -f rust_module/hy2_proxy/Cargo.toml
+          test -f rust_module/hy2_proxy/Cargo.lock
+          test -f rust_module/hy2_proxy/src/main.rs
+          python - <<'PY'
+          from pathlib import Path
+          from hy2_prebuilt import source_fingerprint
+          print(source_fingerprint(Path("rust_module/hy2_proxy")))
+          PY
+      - name: Check Hy2 Rust source
+        shell: bash
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal
+          cargo check --locked --bin hy2_serve --manifest-path rust_module/hy2_proxy/Cargo.toml
       - name: Check external plugin boundaries
         shell: bash
         run: |
@@ -47,6 +63,10 @@ jobs:
           fi
           if grep -REn 'fuckclassroom\.course_selection' --include='*.py' . --exclude-dir=.git; then
             echo "Course Selection plugin must own its implementation modules" >&2
+            exit 1
+          fi
+          if grep -REn 'config\.hy2_(source_dir|runner_path)' --include='*.py' . --exclude-dir=.git; then
+            echo "Course Selection must own Hy2 runtime paths" >&2
             exit 1
           fi
           grep -F 'from .assistant import CourseSelectionAssistant' services.py

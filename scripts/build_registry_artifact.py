@@ -22,7 +22,7 @@ ROOT_FILES = (
     "helpers.py", "hy2_prebuilt.py", "models.py", "proxy.py", "session.py",
     "requirements.txt", "README.md",
 )
-TREE_DIRS = ("templates", "static")
+TREE_DIRS = ("templates", "static", "rust_module")
 
 
 def validate_manifest(manifest: dict[str, object], version: str) -> None:
@@ -76,6 +76,8 @@ def build(version: str, root: Path) -> tuple[Path, Path]:
         names = archive.namelist()
         if names.count("plugin.json") != 1 or any(name.startswith(f"{PLUGIN_ID}/") for name in names):
             raise ValueError("invalid Registry v1 ZIP layout")
+        if "rust_module/hy2_proxy/Cargo.toml" not in names:
+            raise ValueError("Registry artifact is missing plugin-owned Hy2 Rust source")
         validate_manifest(json.loads(archive.read("plugin.json")), version)
 
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
