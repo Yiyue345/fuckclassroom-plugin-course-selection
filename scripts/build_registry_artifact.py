@@ -22,7 +22,7 @@ ROOT_FILES = (
     "helpers.py", "hy2_prebuilt.py", "models.py", "proxy.py", "session.py",
     "requirements.txt", "README.md",
 )
-TREE_DIRS = ("templates", "static")
+TREE_DIRS = ("templates", "static", "rust_module")
 
 
 def validate_manifest(manifest: dict[str, object], version: str) -> None:
@@ -34,6 +34,9 @@ def validate_manifest(manifest: dict[str, object], version: str) -> None:
         raise ValueError("invalid course_selection entry/dependency")
     if manifest.get("route_prefix") is not None or manifest.get("rpc_api_version") is not None or manifest.get("rpc_permissions") != []:
         raise ValueError("in-process plugin cannot declare RPC runtime fields")
+    source_dir = Path("rust_module") / "hy2_proxy"
+    if not (source_dir / "Cargo.toml").is_file():
+        raise ValueError("course_selection artifact must include the Hy2 Rust source")
 
 
 def build(version: str, root: Path) -> tuple[Path, Path]:
