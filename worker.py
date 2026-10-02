@@ -4,13 +4,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fuckclassroom.core.config import AppConfig
-from fuckclassroom.course_selection import (
-    CourseSelectionAssistant,
-    SelectionBatch,
-    WebVpnSessionStatus,
-)
-from fuckclassroom.course_selection.automation import AutoSelectionService
-from fuckclassroom.course_selection.proxy import Hy2ProxyError
+from .assistant import CourseSelectionAssistant
+from .automation import AutoSelectionService
+from .models import SelectionBatch, WebVpnSessionStatus
+from .proxy import Hy2ProxyError
 
 
 class _RemoteHy2Proxy:

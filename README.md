@@ -18,7 +18,7 @@ FuckClassroom 的独立本科选课插件，插件 ID 为 `course_selection`。
 - Required host plugin: `core_ui`
 - Python dependency: `playwright>=1.45`
 
-第一阶段仍复用宿主提供的 `fuckclassroom.course_selection` 底层兼容层（WebVPN、Hy2、选课协议、自动任务实现）；插件 UI、生命周期、Worker facade、路由、模板与静态资源已经独立到本仓库。
+本科选课的 `CourseSelectionAssistant`、协议模型、WebVPN/访问策略、Hy2 管理代码、全校开课查询与自动选课实现已经迁入本仓库，不再 import 宿主的 `fuckclassroom.course_selection` 包。宿主仍提供认证/凭据、Plugin API、Process Host 与当前 Hy2 原生资源路径等基础设施。
 
 ## 开发
 
