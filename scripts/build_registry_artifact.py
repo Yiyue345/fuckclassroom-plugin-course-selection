@@ -34,9 +34,6 @@ def validate_manifest(manifest: dict[str, object], version: str) -> None:
         raise ValueError("invalid course_selection entry/dependency")
     if manifest.get("route_prefix") is not None or manifest.get("rpc_api_version") is not None or manifest.get("rpc_permissions") != []:
         raise ValueError("in-process plugin cannot declare RPC runtime fields")
-    source_dir = Path("rust_module") / "hy2_proxy"
-    if not (source_dir / "Cargo.toml").is_file():
-        raise ValueError("course_selection artifact must include the Hy2 Rust source")
 
 
 def build(version: str, root: Path) -> tuple[Path, Path]:
@@ -79,6 +76,8 @@ def build(version: str, root: Path) -> tuple[Path, Path]:
         names = archive.namelist()
         if names.count("plugin.json") != 1 or any(name.startswith(f"{PLUGIN_ID}/") for name in names):
             raise ValueError("invalid Registry v1 ZIP layout")
+        if "rust_module/hy2_proxy/Cargo.toml" not in names:
+            raise ValueError("Registry artifact is missing plugin-owned Hy2 Rust source")
         validate_manifest(json.loads(archive.read("plugin.json")), version)
 
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
