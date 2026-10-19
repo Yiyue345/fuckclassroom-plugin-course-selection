@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from fuckclassroom.core.config import AppConfig
+from .hy2_prebuilt import Hy2PrebuiltError, install_prebuilt_runner
 
 
 ProgressCallback = Callable[[int, str], None]
@@ -24,6 +25,13 @@ _ENDPOINT_PATTERN = re.compile(
 )
 _MAX_PROXY_HEADER_BYTES = 64 * 1024
 _HY2_BUILD_TIMEOUT_SECONDS = 900.0
+_PLUGIN_DIR = Path(__file__).resolve().parent
+_DEFAULT_HY2_SOURCE_DIR = _PLUGIN_DIR / "rust_module" / "hy2_proxy"
+
+
+def _default_runner_path(config: AppConfig) -> Path:
+    runner_name = "hy2_serve.exe" if os.name == "nt" else "hy2_serve"
+    return config.data_dir / "hy2" / runner_name
 
 
 class Hy2ProxyError(RuntimeError):
@@ -57,8 +65,16 @@ class _SocksEndpoint:
 
 
 class Hy2ProxyManager:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        source_dir: Path | None = None,
+        runner_path: Path | None = None,
+    ) -> None:
         self.config = config
+        self.source_dir = (source_dir or _DEFAULT_HY2_SOURCE_DIR).resolve()
+        self.runner_path = (runner_path or _default_runner_path(config)).resolve()
         self._lock = threading.RLock()
         self._build_lock = threading.Lock()
         self._build_thread: threading.Thread | None = None
@@ -71,6 +87,12 @@ class Hy2ProxyManager:
         self._last_error = ""
         self._build_error = ""
         if self.config.hy2_enabled:
+            try:
+                install_prebuilt_runner(self.source_dir, self.runner_path)
+            except Hy2PrebuiltError:
+                # A damaged or unsupported bundled prebuilt falls back to the
+                # same plugin-owned Rust source and the existing Cargo path.
+                pass
             self.start_auto_build()
 
     def start_auto_build(self) -> bool:
@@ -190,7 +212,7 @@ class Hy2ProxyManager:
             if self._is_running_locked():
                 return self._proxy_url
             self._stop_locked()
-            runner = self.config.hy2_runner_path
+            runner = self.runner_path
             if not runner.is_file():
                 self._last_error = "Hy2 代理组件未生成可执行文件"
                 raise Hy2ProxyError(self._last_error)
@@ -293,8 +315,8 @@ class Hy2ProxyManager:
                 running=running,
                 message=message,
                 proxy_url=self._proxy_url if running else "",
-                runner_path=str(self.config.hy2_runner_path),
-                source_dir=str(self.config.hy2_source_dir),
+                runner_path=str(self.runner_path),
+                source_dir=str(self.source_dir),
                 building=building,
                 build_detail=build_detail if building else "",
             )
@@ -316,7 +338,7 @@ class Hy2ProxyManager:
             self._build_started_at = None
 
     def _runner_needs_rebuild(self) -> bool:
-        runner = self.config.hy2_runner_path
+        runner = self.runner_path
         if not runner.is_file():
             return True
         try:
@@ -324,7 +346,7 @@ class Hy2ProxyManager:
         except OSError:
             return True
 
-        source_dir = self.config.hy2_source_dir
+        source_dir = self.source_dir
         tracked: list[Path] = [source_dir / "Cargo.toml"]
         for name in ("Cargo.lock", "build.rs", "rust-toolchain.toml", "rust-toolchain"):
             candidate = source_dir / name
@@ -337,7 +359,7 @@ class Hy2ProxyManager:
             return True
 
     def _compile_runner(self, progress: ProgressCallback | None = None) -> None:
-        source_dir = self.config.hy2_source_dir
+        source_dir = self.source_dir
         manifest = source_dir / "Cargo.toml"
         if not manifest.is_file():
             raise Hy2ProxyError(f"没有找到内置 Hy2 Rust 工程：{manifest}")
@@ -432,7 +454,7 @@ class Hy2ProxyManager:
         built_runner = target_dir / "release" / built_name
         if not built_runner.is_file():
             raise Hy2ProxyError(f"构建完成但没有找到代理程序：{built_runner}")
-        runner = self.config.hy2_runner_path
+        runner = self.runner_path
         runner.parent.mkdir(parents=True, exist_ok=True)
         self._build_detail = "Cargo 构建完成，正在安装本地代理组件"
         shutil.copy2(built_runner, runner)
