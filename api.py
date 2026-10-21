@@ -207,7 +207,13 @@ class SelectionApiMixin:
         access = self._selection_access()
         if not self.storage_state_path.exists():
             raise CourseSelectionApiError("尚未保存教务会话，请先登录")
-        state = self._read_json(self.storage_state_path, default={})
+        from fuckclassroom.auth.webvpn_storage import read_session_snapshot, WebVpnSessionError
+        try:
+            state, generation = read_session_snapshot(self.storage_state_path)
+        except WebVpnSessionError as exc:
+            raise CourseSelectionApiError(str(exc)) from exc
+        self._http_session.snapshot = state
+        self._http_session.generation = generation
         saved_mode = self._saved_access_mode()
         if saved_mode != access.mode:
             saved_label = _selection_access(saved_mode).label
@@ -461,45 +467,26 @@ class SelectionApiMixin:
         return content, content_type, final_url
 
     def _persist_selection_cookies(self, jar: CookieJar) -> None:
-        state = self._read_json(self.storage_state_path, default={})
-        if not isinstance(state, dict):
-            return
-        rows = state.get("cookies", [])
-        if not isinstance(rows, list):
-            rows = []
-        existing = {
-            (str(item.get("name") or ""), str(item.get("domain") or ""), str(item.get("path") or "/")): item
-            for item in rows
-            if isinstance(item, dict)
-        }
+        from fuckclassroom.auth.webvpn_storage import save_storage_state, WebVpnSessionError
+
+        before = getattr(self._http_session, "snapshot", None)
+        generation = getattr(self._http_session, "generation", None)
+        if before is None or generation is None:
+            raise CourseSelectionApiError("教务请求缺少会话快照，请刷新后重试")
+        state = {"cookies": [], "origins": before.get("origins", [])}
         for cookie in jar:
-            key = (cookie.name, cookie.domain, cookie.path)
-            item = existing.get(key)
-            if item is None:
-                item = {
-                    "name": cookie.name,
-                    "domain": cookie.domain,
-                    "path": cookie.path,
-                    "httpOnly": False,
-                    "sameSite": "Lax",
-                }
-                rows.append(item)
-                existing[key] = item
-            item.update(
-                {
-                    "value": cookie.value,
-                    "expires": cookie.expires if cookie.expires is not None else -1,
-                    "secure": cookie.secure,
-                }
-            )
-        state["cookies"] = rows
+            state["cookies"].append({
+                "name": cookie.name, "domain": cookie.domain, "path": cookie.path,
+                "value": cookie.value, "expires": cookie.expires if cookie.expires is not None else -1,
+                "secure": cookie.secure, "httpOnly": False, "sameSite": "Lax",
+            })
         try:
-            atomic_write_text(
-                self.storage_state_path,
-                json.dumps(state, ensure_ascii=False, indent=2),
+            save_storage_state(
+                self.storage_state_path, state,
+                expected_generation=generation, previous_state=before,
             )
-        except OSError:
-            pass
+        except WebVpnSessionError as exc:
+            raise CourseSelectionApiError(str(exc)) from exc
 
     def refresh_selection_info_for_web(
         self,

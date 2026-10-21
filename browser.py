@@ -43,7 +43,7 @@ class SelectionBrowserMixin:
         if not candidates:
             print("当前页面没有找到匹配课程。请手动调整筛选条件或换到正确选课页面后重试。")
             input("按 Enter 保存当前会话并关闭浏览器...")
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
             self._write_session_meta(page.url)
             context.close()
             return
@@ -56,7 +56,7 @@ class SelectionBrowserMixin:
         raw_index = input("输入要操作的候选编号；直接回车则取消：").strip()
         if not raw_index:
             print("已取消。")
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
             self._write_session_meta(page.url)
             context.close()
             return
@@ -68,7 +68,7 @@ class SelectionBrowserMixin:
         confirm = input("确认只点击一次该行里的选课/选择/提交按钮？输入 YES 继续：").strip()
         if confirm != "YES":
             print("未确认，已取消。")
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
             self._write_session_meta(page.url)
             context.close()
             return
@@ -80,7 +80,7 @@ class SelectionBrowserMixin:
         else:
             print("没有在候选行中找到可点击的选课按钮，请在浏览器里手动处理已标出的课程。")
         input("处理完成后按 Enter 保存当前会话并关闭浏览器...")
-        context.storage_state(path=str(self.storage_state_path))
+        self._save_browser_storage_state(context)
         self._write_session_meta(page.url)
         context.close()
 
@@ -481,7 +481,7 @@ class SelectionBrowserMixin:
             return _ManagedContext(
                 playwright,
                 browser,
-                browser.new_context(storage_state=str(self.storage_state_path)),
+                self._new_login_context(browser),
                 timeout_ms,
             )
         except Exception:
@@ -493,12 +493,12 @@ class SelectionBrowserMixin:
         deadline = datetime.now(timezone.utc).timestamp() + timeout_ms / 1000
         while datetime.now(timezone.utc).timestamp() < deadline:
             if page.is_closed():
-                context.storage_state(path=str(self.storage_state_path))
+                self._save_browser_storage_state(context)
                 self._write_session_meta("")
                 context.close()
                 return
             page.wait_for_timeout(5_000)
-        context.storage_state(path=str(self.storage_state_path))
+        self._save_browser_storage_state(context)
         self._write_session_meta(page.url if not page.is_closed() else "")
         context.close()
 
