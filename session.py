@@ -79,6 +79,9 @@ class SelectionSessionMixin:
         return self.credential_store.public_status()
 
     def clear_session(self) -> None:
+        broker = getattr(self, "_webvpn_session", None)
+        if broker is not None:
+            broker.clear_session()
         with self._login_lock:
             with self._selection_token_lock:
                 self._selection_token = ""
@@ -97,6 +100,9 @@ class SelectionSessionMixin:
         *,
         auto_relogin: bool = True,
     ) -> WebVpnSessionStatus:
+        from fuckclassroom.auth.webvpn_storage import session_generation
+        if session_generation(self.storage_state_path)[1]:
+            return WebVpnSessionStatus(False, "已主动退出 WebVPN，请手动重新连接")
         with self._login_lock:
             deadline = time.monotonic() + max(1.0, timeout_ms / 1000)
             status = self._verify_saved_session_once(min(timeout_ms, 5_000))
@@ -149,13 +155,15 @@ class SelectionSessionMixin:
         self._ensure_session_dir()
         with self._playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
-            context = browser.new_context()
+            from fuckclassroom.auth.webvpn_storage import begin_session, new_browser_context
+            begin_session(self.storage_state_path)
+            context = new_browser_context(browser, self.storage_state_path, reuse_saved_session=False)
             page = context.new_page()
             page.goto(WEBVPN_URL, wait_until="domcontentloaded", timeout=timeout_ms)
             print("请在弹出的浏览器中完成 WebVPN 登录。")
             input("登录完成后按 Enter，脚本会打开本科教务系统并保存独立会话...")
             page.goto(JW_WEBVPN_HOME_URL, wait_until="domcontentloaded", timeout=timeout_ms)
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
             self._write_session_meta(page.url)
             self._write_session_check(_session_check(True, "WebVPN/教务会话有效", page.url))
             print(f"WebVPN/教务会话已保存：{self.storage_state_path}")
@@ -168,7 +176,7 @@ class SelectionSessionMixin:
         page.goto(JW_WEBVPN_HOME_URL, wait_until="domcontentloaded", timeout=timeout_ms)
         print(f"已打开本科教务系统：{page.url}")
         input("操作完成后按 Enter 保存当前会话并关闭浏览器...")
-        context.storage_state(path=str(self.storage_state_path))
+        self._save_browser_storage_state(context)
         self._write_session_meta(page.url)
         context.close()
 
@@ -180,6 +188,13 @@ class SelectionSessionMixin:
         force_interactive: bool = False,
     ) -> str:
         self._ensure_session_dir()
+        if force_interactive:
+            broker = getattr(self, "_webvpn_session", None)
+            if broker is not None:
+                broker.authorize_login()
+            else:
+                from fuckclassroom.auth.webvpn_storage import begin_session
+                begin_session(self.storage_state_path)
         _report(progress, 1, "正在等待其他登录流程结束")
         with self._login_lock:
             try:
@@ -276,7 +291,7 @@ class SelectionSessionMixin:
                     if self._looks_like_jw_home(page):
                         _report(progress, 60, f"{access.label}教务登录成功，正在保存会话")
                         page.wait_for_timeout(250)
-                        context.storage_state(path=str(self.storage_state_path))
+                        self._save_browser_storage_state(context)
                         self._write_session_meta(page.url)
                         self._write_session_check(_session_check(True, f"{access.label}教务会话有效", page.url))
                         self._write_access_mode(access.mode)
@@ -311,7 +326,7 @@ class SelectionSessionMixin:
                         _session_check(False, message, access.login_url)
                     )
                     raise CourseSelectionApiError(message)
-                context.storage_state(path=str(self.storage_state_path))
+                self._save_browser_storage_state(context)
                 self._write_session_meta(page.url if not page.is_closed() else "")
                 browser.close()
                 _report(progress, 100, "登录等待超时，已保存当前浏览器会话")
@@ -370,7 +385,7 @@ class SelectionSessionMixin:
                         continue
                     reason = self._login_interaction_reason(page)
                     if reason:
-                        context.storage_state(path=str(self.storage_state_path))
+                        self._save_browser_storage_state(context)
                         self._write_access_mode(access.mode)
                         raise CourseSelectionApiError(reason)
                     now = time.monotonic()
@@ -384,19 +399,17 @@ class SelectionSessionMixin:
                         self._goto_login_page(page, access.home_url, min(remaining_ms, 30_000))
                         continue
                     page.wait_for_timeout(400)
-                context.storage_state(path=str(self.storage_state_path))
+                self._save_browser_storage_state(context)
                 self._write_access_mode(access.mode)
                 raise CourseSelectionApiError("自动登录等待超时")
             finally:
                 browser.close()
 
     def _new_login_context(self, browser: Any, *, reuse_saved_session: bool = True) -> Any:
-        if reuse_saved_session and self.storage_state_path.exists():
-            try:
-                return browser.new_context(storage_state=str(self.storage_state_path))
-            except Exception:
-                pass
-        return browser.new_context()
+        from fuckclassroom.auth.webvpn_storage import new_browser_context
+        return new_browser_context(
+            browser, self.storage_state_path, reuse_saved_session=reuse_saved_session
+        )
 
     @staticmethod
     def _fill_public_credentials(page: Any, credentials: SelectionCredentials) -> bool:
@@ -431,7 +444,7 @@ class SelectionSessionMixin:
         access: SelectionAccess,
     ) -> None:
         try:
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
         except Exception:
             pass
         self._write_session_meta("")
@@ -473,7 +486,7 @@ class SelectionSessionMixin:
         page: Any,
         access: SelectionAccess,
     ) -> None:
-        context.storage_state(path=str(self.storage_state_path))
+        self._save_browser_storage_state(context)
         self._write_session_meta(page.url)
         self._write_session_check(_session_check(True, f"{access.label}教务会话有效", page.url))
         self._write_access_mode(access.mode)
@@ -524,13 +537,13 @@ class SelectionSessionMixin:
         check = self._verify_opened_session(context, page)
         self._write_session_check(check)
         if not check["is_valid"]:
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
             self._write_session_meta(page.url if not page.is_closed() else "")
             context.close()
             message = str(check.get("message") or "会话已失效，请重新登录")
             _report(progress, 100, message)
             return f"/selection?{urlencode({'select_error': message})}"
-        context.storage_state(path=str(self.storage_state_path))
+        self._save_browser_storage_state(context)
         self._write_session_meta(page.url if not page.is_closed() else "")
         context.close()
         _report(progress, 100, ready_message)
@@ -573,7 +586,7 @@ class SelectionSessionMixin:
             page.wait_for_timeout(5_000)
 
         if not page.is_closed():
-            context.storage_state(path=str(self.storage_state_path))
+            self._save_browser_storage_state(context)
             self._write_session_meta(page.url)
         context.close()
         capture_base = self._write_capture(captured)
@@ -600,13 +613,13 @@ class SelectionSessionMixin:
         deadline = datetime.now(timezone.utc).timestamp() + timeout_ms / 1000
         while datetime.now(timezone.utc).timestamp() < deadline:
             if page.is_closed():
-                context.storage_state(path=str(self.storage_state_path))
+                self._save_browser_storage_state(context)
                 self._write_session_meta("")
                 context.close()
                 _report(progress, 100, "浏览器已关闭，会话已保存")
                 return "/selection"
             page.wait_for_timeout(5_000)
-        context.storage_state(path=str(self.storage_state_path))
+        self._save_browser_storage_state(context)
         self._write_session_meta(page.url if not page.is_closed() else "")
         context.close()
         _report(progress, 100, "定位任务已结束，会话已保存")
