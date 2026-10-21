@@ -188,13 +188,14 @@ class SelectionSessionMixin:
         force_interactive: bool = False,
     ) -> str:
         self._ensure_session_dir()
-        if force_interactive:
-            broker = getattr(self, "_webvpn_session", None)
-            if broker is not None:
-                broker.authorize_login()
-            else:
-                from fuckclassroom.auth.webvpn_storage import begin_session
-                begin_session(self.storage_state_path)
+        # login_for_web represents an explicit user-triggered login even when
+        # it first tries saved credentials headlessly (force_interactive=False).
+        broker = getattr(self, "_webvpn_session", None)
+        if broker is not None:
+            broker.authorize_login()
+        else:
+            from fuckclassroom.auth.webvpn_storage import begin_session
+            begin_session(self.storage_state_path)
         _report(progress, 1, "正在等待其他登录流程结束")
         with self._login_lock:
             try:
