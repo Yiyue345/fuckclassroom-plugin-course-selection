@@ -66,6 +66,12 @@ class CourseSelectionAssistant(
         self._selection_token_lock = threading.Lock()
         self._login_lock = login_lock or threading.Lock()
         self._selection_action_lock = threading.Lock()
+        self._webvpn_session = None
+        self._http_session = threading.local()
+
+    def _save_browser_storage_state(self, context: Any) -> None:
+        from fuckclassroom.auth.webvpn_storage import save_browser_context
+        save_browser_context(self.storage_state_path, context)
 
     def _request_selection_json(
         self,
