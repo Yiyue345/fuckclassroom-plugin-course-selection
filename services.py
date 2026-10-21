@@ -499,6 +499,9 @@ def setup_services(context: PluginContext) -> None:
     elif hy2_proxy is None:
         hy2_proxy = getattr(local, "hy2_proxy", None) or Hy2ProxyManager(config)
         services.add("hy2_proxy", hy2_proxy)
+    # Coordinate login and generation checks even when selection is installed
+    # as an external plugin; lab_selection can share the same core service.
+    local._webvpn_session = services.get("webvpn_session")
     host = ProcessPluginHost(
         plugin_id="course-selection-worker",
         root=Path(__file__).resolve().parent,
